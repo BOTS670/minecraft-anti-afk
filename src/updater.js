@@ -40,7 +40,7 @@ function compareVersions(a, b) {
  * Один запрос к GitHub Releases API. Ничего, кроме GET, не отправляется.
  * @returns {{kind:'no-releases'}|{kind:'up-to-date'|'available', version:string, url:string}}
  */
-async function checkForUpdate({ repo, currentVersion, fetchFn, timeoutMs = 10000 }) {
+async function checkForUpdate({ repo, currentVersion, fetchFn, installKind = 'portable', timeoutMs = 10000 }) {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
@@ -63,12 +63,22 @@ async function checkForUpdate({ repo, currentVersion, fetchFn, timeoutMs = 10000
     const kind = compareVersions(version, currentVersion) > 0 ? 'available' : 'up-to-date';
     if (kind !== 'available') return { kind, version, url, asset: null };
 
-    const assetName = `Minecraft-Anti-AFK-${version}-portable.exe`;
+    if (!['portable', 'installer'].includes(installKind)) {
+      return { kind, version, url, asset: null, assetError: 'Неизвестный тип установки' };
+    }
+
+    const assetName = `Minecraft-Anti-AFK-${version}-${installKind === 'portable' ? 'portable' : 'setup'}.exe`;
     const releaseAsset = Array.isArray(data.assets)
       ? data.assets.find((asset) => asset && asset.name === assetName)
       : null;
     if (!releaseAsset) {
-      return { kind, version, url, asset: null, assetError: 'В релизе нет portable EXE' };
+      return {
+        kind,
+        version,
+        url,
+        asset: null,
+        assetError: `В релизе нет файла для ${installKind === 'portable' ? 'portable' : 'установленной'} версии`,
+      };
     }
 
     const digest = /^sha256:([a-f0-9]{64})$/i.exec(String(releaseAsset.digest || ''));
@@ -137,6 +147,7 @@ class UpdateService {
   constructor({ repo, currentVersion, fetchFn, autoCheck = true, intervalMs = SIX_HOURS_MS, firstDelayMs = FIRST_CHECK_DELAY_MS,
     setTimeout: st = setTimeout, clearTimeout: ct = clearTimeout, setInterval: si = setInterval, clearInterval: ci = clearInterval,
     now = Date.now, onChange = () => {}, portablePath = process.env.PORTABLE_EXECUTABLE_FILE,
+    installKind = portablePath ? 'portable' : null, executablePath = process.execPath,
     installScriptPath = path.join(__dirname, '..', 'scripts', 'install-update.ps1'), processId = process.pid,
     tempDir = os.tmpdir(), spawnFn = spawn }) {
     this._repo = parseRepo(repo);
@@ -148,6 +159,8 @@ class UpdateService {
     this._now = now;
     this._onChange = onChange;
     this._portablePath = portablePath;
+    this._installKind = installKind;
+    this._targetPath = installKind === 'portable' ? portablePath : installKind === 'installer' ? executablePath : null;
     this._installScriptPath = installScriptPath;
     this._processId = processId;
     this._tempDir = tempDir;
@@ -199,15 +212,20 @@ class UpdateService {
     this._busy = true;
     this._set({ status: 'checking', error: null });
     try {
-      const r = await checkForUpdate({ repo: this._repo, currentVersion: this._state.currentVersion, fetchFn: this._fetch });
+      const r = await checkForUpdate({
+        repo: this._repo,
+        currentVersion: this._state.currentVersion,
+        fetchFn: this._fetch,
+        installKind: this._installKind || 'portable',
+      });
       this._url = r.kind === 'available' ? r.url : null;
       this._asset = r.kind === 'available' ? r.asset : null;
       this._set({
         status: r.kind,
         latestVersion: r.version || null,
         checkedAt: this._now(),
-        installAvailable: Boolean(this._asset && this._portablePath),
-        error: r.assetError || (this._asset && !this._portablePath ? 'Автоустановка доступна только в portable EXE' : null),
+        installAvailable: Boolean(this._asset && this._targetPath && this._installKind),
+        error: r.assetError || (this._asset && !this._installKind ? 'Автоустановка доступна только в собранной версии' : null),
       });
     } catch (err) {
       this._set({ status: 'error', error: String((err && err.message) || err).slice(0, 200), checkedAt: this._now() });
@@ -220,11 +238,11 @@ class UpdateService {
   async install() {
     if (this._state.status !== 'available') throw new Error('Нет доступного обновления');
     if (!this._asset) throw new Error(this._state.error || 'В релизе нет проверенного файла для установки');
-    if (!this._portablePath || !path.isAbsolute(this._portablePath) || path.extname(this._portablePath).toLowerCase() !== '.exe') {
-      throw new Error('Автоустановка доступна только в portable EXE');
+    if (!['portable', 'installer'].includes(this._installKind) || !this._targetPath || !path.isAbsolute(this._targetPath)) {
+      throw new Error('Автоустановка доступна только в собранной версии');
     }
-    if (!/^Minecraft-Anti-AFK-\d+\.\d+\.\d+-portable\.exe$/i.test(path.basename(this._portablePath))) {
-      throw new Error('Путь portable-приложения не прошёл проверку');
+    if (path.extname(this._targetPath).toLowerCase() !== '.exe') {
+      throw new Error('Путь приложения не прошёл проверку');
     }
 
     this._set({ status: 'downloading', error: null });
@@ -242,10 +260,12 @@ class UpdateService {
         'Bypass',
         '-File',
         this._installScriptPath,
+        '-UpdateType',
+        this._installKind,
         '-NewExecutablePath',
         downloadPath,
         '-TargetExecutablePath',
-        this._portablePath,
+        this._targetPath,
         '-ProcessId',
         String(this._processId),
       ], { detached: true, windowsHide: true, stdio: 'ignore' });

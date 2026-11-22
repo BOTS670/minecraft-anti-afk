@@ -19,7 +19,17 @@ class Session {
     this._onChange = onChange;
     this._watch = null;
     this._failures = 0;
-    this._state = { status: 'idle', client: null, mode: null, intervalSec: null, nextActionAt: null, lastResult: null, stopReason: null };
+    this._state = {
+      status: 'idle',
+      client: null,
+      mode: null,
+      intervalSec: null,
+      nextActionAt: null,
+      lastResult: null,
+      stopReason: null,
+      startedAt: null,
+      actionCount: 0,
+    };
   }
 
   snapshot() {
@@ -34,7 +44,17 @@ class Session {
     if (this._state.status === 'running') throw new Error('Уже запущено');
     if (!this._isAlive(client.pid)) throw new Error('Выбранный процесс Minecraft не найден');
     this._failures = 0;
-    this._state = { status: 'running', client, mode, intervalSec, nextActionAt: null, lastResult: null, stopReason: null };
+    this._state = {
+      status: 'running',
+      client,
+      mode,
+      intervalSec,
+      nextActionAt: null,
+      lastResult: null,
+      stopReason: null,
+      startedAt: Date.now(),
+      actionCount: 0,
+    };
     this._scheduler.start(
       intervalSec * 1000,
       () => this._act(),
@@ -60,10 +80,14 @@ class Session {
     try {
       await this._send(client.pid, mode);
       this._failures = 0;
-      if (this._state.status === 'running') this._state.lastResult = { ok: true, at: Date.now() };
+      if (this._state.status === 'running') {
+        this._state.actionCount += 1;
+        this._state.lastResult = { ok: true, at: Date.now() };
+      }
     } catch (err) {
       this._failures += 1;
       if (this._state.status !== 'running') return;
+      this._state.actionCount += 1;
       this._state.lastResult = { ok: false, at: Date.now(), error: String((err && err.message) || err).slice(0, 300) };
       if (!this._isAlive(client.pid)) this.stop('Процесс Minecraft закрыт');
       else if (this._failures >= MAX_CONSECUTIVE_FAILURES) this.stop(`Остановлено после ${MAX_CONSECUTIVE_FAILURES} неудач подряд`);

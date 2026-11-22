@@ -2,71 +2,218 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101712">
   <title>Minecraft Anti-AFK</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main>
-    <section class="countdown" aria-live="polite">
-      <div id="timer" class="timer">—</div>
-      <div id="status" class="status">Не запущено</div>
-    </section>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="Minecraft Anti-AFK — обзор">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <span class="brand-copy"><strong>BLOCKTIME</strong><small>AFK ASSISTANT</small></span>
+      </a>
 
-    <section class="block">
-      <div class="row">
-        <label for="clients">Клиент Minecraft</label>
-        <button id="refresh" type="button" class="ghost">Обновить список</button>
+      <div class="side-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
+      <nav class="navigation" aria-label="Основная навигация">
+        <button class="nav-item active" type="button" data-view="overview"><span class="nav-icon">◫</span>Обзор</button>
+        <button class="nav-item" type="button" data-view="profiles"><span class="nav-icon">▤</span>Профили<span id="profile-count" class="nav-count">0</span></button>
+        <button class="nav-item" type="button" data-view="history"><span class="nav-icon">◷</span>История</button>
+        <button class="nav-item" type="button" data-view="settings"><span class="nav-icon">⚙</span>Настройки</button>
+      </nav>
+
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-status">
+        <span id="side-dot" class="status-dot"></span>
+        <span><strong id="side-status">Готов к работе</strong><small>Локально · Windows</small></span>
       </div>
-      <select id="clients" size="4" aria-describedby="clients-hint"></select>
-      <p id="clients-hint" class="hint"></p>
-    </section>
+      <div class="version-label">BLOCKTIME <span id="version"></span></div>
+    </aside>
 
-    <section class="block">
-      <fieldset id="modes">
-        <legend>Режим активности</legend>
-        <label><input type="radio" name="mode" value="look" checked> Повернуть камеру и вернуть обратно</label>
-        <label><input type="radio" name="mode" value="step"> Шаг вперёд и назад</label>
-        <label><input type="radio" name="mode" value="jump"> Прыжок</label>
-      </fieldset>
-      <div class="row interval">
-        <label for="interval">Интервал, секунд</label>
-        <input id="interval" type="number" min="5" max="3600" step="1" value="60">
-      </div>
-    </section>
-
-    <section class="actions">
-      <button id="start" type="button" class="primary">Запустить</button>
-      <button id="stop" type="button" class="danger" disabled>Остановить</button>
-    </section>
-
-    <section class="block summary">
-      <dl>
-        <dt>Клиент</dt><dd id="s-client">—</dd>
-        <dt>Режим</dt><dd id="s-mode">—</dd>
-        <dt>Последнее действие</dt><dd id="s-last">—</dd>
-      </dl>
-      <p id="message" class="message" role="status"></p>
-    </section>
-
-    <section class="block update">
-      <div class="row">
-        <span id="u-text" role="status">Обновления: проверка…</span>
-        <button id="u-check" type="button" class="ghost">Проверить</button>
-      </div>
-      <div class="row">
-        <label class="check"><input type="checkbox" id="u-auto" checked> Проверять автоматически</label>
-        <div class="update-actions">
-          <button id="u-install" type="button" class="primary" hidden>Установить</button>
-          <button id="u-cancel" type="button" class="ghost" hidden>Отмена</button>
-          <button id="u-open" type="button" class="ghost" hidden>Страница релиза</button>
+    <main class="main-content">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">MINECRAFT JAVA EDITION</div>
+          <h1 id="page-title">Обзор</h1>
         </div>
-      </div>
-    </section>
+        <div class="topbar-actions">
+          <span id="top-status" class="top-status"><span class="status-dot"></span><span>Остановлено</span></span>
+          <button id="refresh" class="icon-button" type="button" aria-label="Обновить список клиентов" title="Обновить список">↻</button>
+        </div>
+      </header>
 
-    <p class="hint small">Во время действия окно Minecraft ненадолго выходит на передний план, затем возвращается прежнее. Используйте только там, где это разрешено правилами сервера.</p>
-  </main>
+      <section id="view-overview" class="view active" aria-label="Обзор">
+        <div class="dashboard-grid">
+          <section class="hero-card">
+            <div class="hero-glow"></div>
+            <div class="hero-topline">
+              <span class="live-label"><span id="live-dot" class="live-dot"></span><span id="status">Не запущено</span></span>
+              <span id="hero-mode" class="mode-chip">РЕЖИМ НЕ ВЫБРАН</span>
+            </div>
+            <div class="timer-wrap">
+              <div id="timer" class="timer">--:--</div>
+              <div class="timer-caption">ДО СЛЕДУЮЩЕГО ДЕЙСТВИЯ</div>
+            </div>
+            <div class="progress-track"><div id="timer-progress" class="progress-fill"></div></div>
+            <div class="hero-footer">
+              <span id="hero-client">Выберите запущенный клиент Minecraft</span>
+              <span id="hero-interval">ИНТЕРВАЛ —</span>
+            </div>
+          </section>
+
+          <section class="side-stats">
+            <article class="stat-card">
+              <span class="stat-icon green">◉</span>
+              <div class="stat-label">АКТИВНОСТЬ СЕГОДНЯ</div>
+              <div id="today-actions" class="stat-value">0</div>
+              <div class="stat-foot">действий выполнено</div>
+            </article>
+            <article class="stat-card">
+              <span class="stat-icon amber">◷</span>
+              <div class="stat-label">ТЕКУЩАЯ СЕССИЯ</div>
+              <div id="session-duration" class="stat-value">—</div>
+              <div class="stat-foot">время в работе</div>
+            </article>
+          </section>
+        </div>
+
+        <div class="section-heading">
+          <div><span class="eyebrow">БЫСТРЫЙ СТАРТ</span><h2>Настрой активность</h2></div>
+          <span class="section-note">Изменения применятся при следующем запуске</span>
+        </div>
+
+        <section class="config-card">
+          <div class="field-group client-field">
+            <div class="field-heading">
+              <label for="clients">Клиент Minecraft</label>
+              <span id="client-count" class="count-label">Поиск окон…</span>
+            </div>
+            <select id="clients" aria-describedby="clients-hint">
+              <option value="">Поиск запущенных клиентов…</option>
+            </select>
+            <p id="clients-hint" class="field-hint">Найденные окна Minecraft Java появятся здесь.</p>
+          </div>
+
+          <div class="field-group">
+            <div class="field-heading"><span class="field-label">Режим активности</span><span class="count-label">ВЫБЕРИ ОДИН</span></div>
+            <div class="mode-grid">
+              <label class="mode-card selected">
+                <input type="radio" name="mode" value="look" checked>
+                <span class="mode-symbol">⌖</span><strong>Камера</strong><small>Мягкий поворот</small>
+              </label>
+              <label class="mode-card">
+                <input type="radio" name="mode" value="step">
+                <span class="mode-symbol">⇄</span><strong>Шаг</strong><small>Вперёд и назад</small>
+              </label>
+              <label class="mode-card">
+                <input type="radio" name="mode" value="jump">
+                <span class="mode-symbol">↑</span><strong>Прыжок</strong><small>Одно нажатие</small>
+              </label>
+            </div>
+          </div>
+
+          <div class="interval-row">
+            <div class="field-group interval-field">
+              <div class="field-heading">
+                <label for="interval">Интервал</label>
+                <span class="count-label">ОТ 5 СЕКУНД ДО 60 МИНУТ</span>
+              </div>
+              <div class="interval-control">
+                <input id="interval" type="range" min="5" max="3600" step="5" value="60">
+                <output id="interval-output" for="interval">1 мин</output>
+              </div>
+            </div>
+            <button id="start" class="button button-primary" type="button"><span>▶</span> Запустить</button>
+            <button id="stop" class="button button-stop" type="button" disabled><span>■</span> Остановить</button>
+          </div>
+
+          <div class="presets-row">
+            <span class="count-label">БЫСТРЫЕ ИНТЕРВАЛЫ</span>
+            <div class="preset-list">
+              <button class="preset-button active" type="button" data-interval="60">1 мин</button>
+              <button class="preset-button" type="button" data-interval="180">3 мин</button>
+              <button class="preset-button" type="button" data-interval="300">5 мин</button>
+              <button class="preset-button" type="button" data-interval="600">10 мин</button>
+              <button class="preset-button" type="button" data-interval="1800">30 мин</button>
+            </div>
+          </div>
+        </section>
+
+        <div class="section-heading compact-heading">
+          <div><span class="eyebrow">ТВОИ НАСТРОЙКИ</span><h2>Сохранённые профили</h2></div>
+          <button class="text-button" type="button" data-go="profiles">Все профили <span>→</span></button>
+        </div>
+        <section id="overview-profiles" class="profile-strip"></section>
+        <p id="message" class="message" role="status"></p>
+      </section>
+
+      <section id="view-profiles" class="view" aria-label="Профили" hidden>
+        <div class="page-intro">
+          <span class="eyebrow">ТВОИ ПРЕСЕТЫ</span>
+          <h2>Настройки в один клик</h2>
+          <p>Сохраняй любимые режимы и применяй их перед стартом сессии.</p>
+        </div>
+        <section class="profile-editor">
+          <div class="editor-heading"><span class="editor-icon">＋</span><div><h3>Сохранить профиль</h3><p>Текущий режим и интервал станут новым профилем.</p></div></div>
+          <div class="editor-row">
+            <label class="visually-hidden" for="profile-name">Название профиля</label>
+            <input id="profile-name" type="text" maxlength="32" placeholder="Например, Спокойный режим">
+            <button id="save-profile" class="button button-primary" type="button">Сохранить</button>
+          </div>
+        </section>
+        <div class="section-heading"><div><span class="eyebrow">ЛИЧНАЯ БИБЛИОТЕКА</span><h2>Мои профили</h2></div><span id="profiles-total" class="section-note">0 из 20</span></div>
+        <section id="profiles-list" class="profiles-grid"></section>
+        <p id="profiles-empty" class="empty-state" hidden>Пока нет сохранённых профилей. Создай первый профиль выше.</p>
+      </section>
+
+      <section id="view-history" class="view" aria-label="История" hidden>
+        <div class="page-intro">
+          <span class="eyebrow">ЖУРНАЛ СОБЫТИЙ</span>
+          <h2>История активности</h2>
+          <p>Последние 100 событий хранятся только на этом устройстве.</p>
+        </div>
+        <div class="history-toolbar"><span id="history-total" class="section-note">0 событий</span><button id="clear-history" class="text-button" type="button">Очистить историю</button></div>
+        <section id="history-list" class="history-list"></section>
+        <p id="history-empty" class="empty-state" hidden>История появится после первого запуска.</p>
+      </section>
+
+      <section id="view-settings" class="view" aria-label="Настройки" hidden>
+        <div class="page-intro">
+          <span class="eyebrow">ПЕРСОНАЛИЗАЦИЯ</span>
+          <h2>Настройки приложения</h2>
+          <p>Управляй уведомлениями и обновлениями.</p>
+        </div>
+        <section class="settings-card">
+          <div class="settings-item">
+            <div><strong>Уведомления о Minecraft</strong><p>Сообщить, если выбранный игровой клиент закрылся.</p></div>
+            <label class="switch"><input id="notifications-toggle" type="checkbox" checked><span class="switch-track"></span><span class="visually-hidden">Включить уведомления</span></label>
+          </div>
+          <div class="settings-item">
+            <div><strong>Проверять обновления</strong><p>Искать новые версии на GitHub автоматически раз в 6 часов.</p></div>
+            <label class="switch"><input id="u-auto" type="checkbox" checked><span class="switch-track"></span><span class="visually-hidden">Автоматическая проверка обновлений</span></label>
+          </div>
+          <div class="update-panel">
+            <div class="update-copy"><span class="update-icon">↻</span><div><strong>Обновления приложения</strong><p id="u-text" role="status">Проверка обновлений…</p></div></div>
+            <div class="update-buttons">
+              <button id="u-check" class="button button-secondary" type="button">Проверить</button>
+              <button id="u-install" class="button button-primary" type="button" hidden>Установить</button>
+              <button id="u-cancel" class="button button-secondary" type="button" hidden>Отмена</button>
+              <button id="u-open" class="text-button" type="button" hidden>Страница релиза →</button>
+            </div>
+          </div>
+          <div class="settings-footer"><span>BLOCKTIME <span id="settings-version"></span></span><span>Windows · локальное хранение</span></div>
+        </section>
+        <div class="privacy-note"><span>◈</span><p>Профили и история остаются на устройстве. GitHub получает запрос только для проверки доступных релизов. Обновление устанавливается лишь после твоего подтверждения.</p></div>
+      </section>
+
+      <footer class="app-footer">
+        <span>ИСПОЛЬЗУЙ ТОЛЬКО ТАМ, ГДЕ АВТОМАТИЗАЦИЯ РАЗРЕШЕНА</span>
+        <a href="https://github.com/BOTS670/minecraft-anti-afk" id="repo-link">Исходный код ↗</a>
+      </footer>
+    </main>
+  </div>
   <script src="renderer.js"></script>
 </body>
 </html>

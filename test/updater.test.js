@@ -12,12 +12,12 @@ const reply = (status, body) => async () => ({ ok: status >= 200 && status < 300
 const REPO = 'me/anti-afk';
 const UPDATE_BYTES = Buffer.from('verified portable update');
 
-function release(tag = 'v1.2.0', bytes = UPDATE_BYTES) {
+function release(tag = 'v1.2.0', bytes = UPDATE_BYTES, installKind = 'portable') {
   const version = tag.replace(/^v/, '');
   return {
     tag_name: tag,
     assets: [{
-      name: `Minecraft-Anti-AFK-${version}-portable.exe`,
+      name: `Minecraft-Anti-AFK-${version}-${installKind === 'installer' ? 'setup' : 'portable'}.exe`,
       size: bytes.length,
       digest: `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`,
     }],
@@ -76,6 +76,17 @@ test('checkForUpdate refuses installation when release asset has no SHA-256 dige
   assert.equal(result.kind, 'available');
   assert.equal(result.asset, null);
   assert.match(result.assetError, /SHA-256/);
+});
+
+test('checkForUpdate selects the installer asset for installed versions', async () => {
+  const result = await checkForUpdate({
+    repo: REPO,
+    currentVersion: '1.0.0',
+    installKind: 'installer',
+    fetchFn: reply(200, release('v1.2.0', UPDATE_BYTES, 'installer')),
+  });
+  assert.equal(result.asset.name, 'Minecraft-Anti-AFK-1.2.0-setup.exe');
+  assert.match(result.asset.url, /Minecraft-Anti-AFK-1\.2\.0-setup\.exe$/);
 });
 
 test('downloadUpdate verifies size and SHA-256 before returning the executable', async () => {
@@ -162,6 +173,7 @@ test('UpdateService installs only a verified asset after explicit invocation', a
       repo: REPO,
       currentVersion: '1.0.0',
       portablePath: 'C:\\Apps\\Minecraft-Anti-AFK-1.0.0-portable.exe',
+      installKind: 'portable',
       installScriptPath: 'C:\\Apps\\scripts\\install-update.ps1',
       processId: 1234,
       tempDir,
@@ -192,9 +204,59 @@ test('UpdateService installs only a verified asset after explicit invocation', a
     const result = await svc.install();
     assert.equal(result.restart, true);
     assert.equal(result.status, 'installing');
-    assert.deepEqual(await fs.readFile(spawnArgs[7]), UPDATE_BYTES);
-    assert.equal(spawnArgs[9], 'C:\\Apps\\Minecraft-Anti-AFK-1.0.0-portable.exe');
-    assert.equal(spawnArgs[11], '1234');
+    assert.deepEqual(await fs.readFile(spawnArgs[9]), UPDATE_BYTES);
+    assert.equal(spawnArgs[7], 'portable');
+    assert.equal(spawnArgs[11], 'C:\\Apps\\Minecraft-Anti-AFK-1.0.0-portable.exe');
+    assert.equal(spawnArgs[13], '1234');
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('UpdateService starts the installer update with per-user setup asset', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mc-installer-update-test-'));
+  let spawnArgs;
+  try {
+    const target = 'C:\\Users\\Player\\AppData\\Local\\Programs\\BLOCKTIME\\BLOCKTIME.exe';
+    const svc = new UpdateService({
+      repo: REPO,
+      currentVersion: '1.0.0',
+      installKind: 'installer',
+      executablePath: target,
+      installScriptPath: 'C:\\Apps\\scripts\\install-update.ps1',
+      processId: 4321,
+      tempDir,
+      fetchFn: async (url) => {
+        if (url.includes('/releases/latest')) return reply(200, release('v1.2.0', UPDATE_BYTES, 'installer'))();
+        return {
+          ok: true,
+          status: 200,
+          url: 'https://release-assets.githubusercontent.com/update.exe',
+          headers: { get: () => String(UPDATE_BYTES.length) },
+          arrayBuffer: async () => UPDATE_BYTES,
+        };
+      },
+      spawnFn: (_command, args) => {
+        spawnArgs = args;
+        return {
+          once(event, callback) {
+            if (event === 'spawn') queueMicrotask(callback);
+            return this;
+          },
+          unref() {},
+        };
+      },
+    });
+
+    await svc.check();
+    assert.equal(svc.snapshot().installAvailable, true);
+    assert.equal(svc.snapshot().status, 'available');
+    const result = await svc.install();
+    assert.equal(result.restart, true);
+    assert.equal(spawnArgs[7], 'installer');
+    assert.equal(spawnArgs[11], target);
+    assert.equal(spawnArgs[13], '4321');
+    assert.deepEqual(await fs.readFile(spawnArgs[9]), UPDATE_BYTES);
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }

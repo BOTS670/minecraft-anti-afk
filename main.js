@@ -1,7 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, shell, net } = require('electron');
-const fs = require('node:fs');
+const { app, BrowserWindow, ipcMain, shell, net, Notification } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -11,47 +10,68 @@ const { Scheduler } = require('./src/scheduler');
 const { Session } = require('./src/session');
 const { listClients, sendAction } = require('./src/windows');
 const { UpdateService } = require('./src/updater');
+const { SettingsStore } = require('./src/settings-store');
 const pkg = require('./package.json');
 
 const INDEX_PATH = path.join(__dirname, 'renderer', 'index.html');
 const INDEX_URL = pathToFileURL(INDEX_PATH).href;
 
 let win = null;
+let settingsStore = null;
+let previousSessionState = null;
 
 const session = new Session({
   sendAction,
   isAlive: isProcessAlive,
   scheduler: new Scheduler(),
   onChange: (state) => {
+    if (settingsStore) recordSessionChanges(state);
     if (win && !win.isDestroyed()) win.webContents.send('session:state', state);
   },
 });
 
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
 
-function loadSettings() {
-  let contents;
+function recordSessionChanges(state) {
+  const previous = previousSessionState;
+  const modeName = { look: 'Камера', step: 'Шаг', jump: 'Прыжок' }[state.mode] || 'Активность';
+  let historyChanged = false;
   try {
-    contents = fs.readFileSync(settingsPath(), 'utf8');
+    if (state.status === 'running' && (!previous || previous.status !== 'running')) {
+      settingsStore.recordHistory({
+        type: 'started',
+        title: 'Сессия запущена',
+        detail: `${modeName} · ${state.intervalSec} сек.`,
+      });
+      historyChanged = true;
+    }
+    if (state.actionCount > (previous ? previous.actionCount : 0) && state.lastResult) {
+      settingsStore.recordHistory({
+        type: 'action',
+        title: state.lastResult.ok ? 'Действие выполнено' : 'Ошибка действия',
+        detail: state.lastResult.ok ? modeName : state.lastResult.error,
+        ok: state.lastResult.ok,
+      });
+      historyChanged = true;
+    }
+    if (previous && previous.status === 'running' && state.status === 'stopped') {
+      settingsStore.recordHistory({
+        type: 'stopped',
+        title: 'Сессия остановлена',
+        detail: state.stopReason || 'Остановлено',
+      });
+      historyChanged = true;
+      if (state.stopReason === 'Процесс Minecraft закрыт' && settingsStore.snapshot().notifications && Notification.isSupported()) {
+        new Notification({ title: 'Minecraft Anti-AFK', body: 'Выбранный клиент Minecraft закрылся.' }).show();
+      }
+    }
   } catch (error) {
-    if (error && error.code === 'ENOENT') return { autoUpdateCheck: true };
-    console.warn('Не удалось прочитать настройки обновлений:', error);
-    return { autoUpdateCheck: true };
+    console.error('Не удалось сохранить событие сессии:', error);
   }
-
-  try {
-    const settings = JSON.parse(contents);
-    return { autoUpdateCheck: settings && settings.autoUpdateCheck !== false };
-  } catch (error) {
-    console.warn('Файл настроек обновлений повреждён:', error);
-    return { autoUpdateCheck: true };
+  previousSessionState = state;
+  if (historyChanged && win && !win.isDestroyed()) {
+    win.webContents.send('history:state', settingsStore.snapshot());
   }
-}
-
-function saveSettings(settings) {
-  const file = settingsPath();
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(settings));
 }
 
 let updates = null;
@@ -60,8 +80,11 @@ function createUpdates() {
   updates = new UpdateService({
     repo: pkg.antiAfk && pkg.antiAfk.updateRepo,
     currentVersion: pkg.version,
-    autoCheck: loadSettings().autoUpdateCheck,
+    autoCheck: settingsStore.snapshot().autoUpdateCheck,
     fetchFn: (url, options) => net.fetch(url, options),
+    installKind: app.isPackaged ? (process.env.PORTABLE_EXECUTABLE_FILE ? 'portable' : 'installer') : null,
+    portablePath: process.env.PORTABLE_EXECUTABLE_FILE,
+    executablePath: process.execPath,
     onChange: (state) => {
       if (win && !win.isDestroyed()) win.webContents.send('update:state', state);
     },
@@ -106,6 +129,18 @@ handle('session:stop', () => {
 
 handle('session:state', () => session.snapshot());
 
+handle('settings:get', () => settingsStore.snapshot());
+handle('profiles:save', (profile) => {
+  settingsStore.saveProfile(profile);
+  return settingsStore.snapshot();
+});
+handle('profiles:delete', (id) => settingsStore.deleteProfile(id));
+handle('history:clear', () => settingsStore.clearHistory());
+handle('settings:set-notifications', (value) => settingsStore.setNotifications(value));
+handle('repo:open', async () => {
+  await shell.openExternal('https://github.com/BOTS670/minecraft-anti-afk');
+  return true;
+});
 handle('update:state', () => updates.snapshot());
 handle('update:check', () => updates.check());
 handle('update:install', async () => {
@@ -116,7 +151,7 @@ handle('update:install', async () => {
 handle('update:set-auto', (value) => {
   if (typeof value !== 'boolean') throw new TypeError('Ожидается true/false');
   updates.setAutoCheck(value);
-  saveSettings({ autoUpdateCheck: value });
+  settingsStore.setAutoUpdateCheck(value);
   return updates.snapshot();
 });
 handle('update:open', async () => {
@@ -128,12 +163,12 @@ handle('update:open', async () => {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 520,
-    height: 640,
-    minWidth: 420,
-    minHeight: 560,
-    title: 'Minecraft Anti-AFK',
-    backgroundColor: '#1c2127',
+    width: 1100,
+    height: 900,
+    minWidth: 760,
+    minHeight: 700,
+    title: 'BLOCKTIME — Minecraft Anti-AFK',
+    backgroundColor: '#101712',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -157,8 +192,12 @@ if (!app.requestSingleInstanceLock()) {
     if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
   });
   app.whenReady().then(() => {
+    settingsStore = new SettingsStore(settingsPath());
     createUpdates();
     createWindow();
+  }).catch((error) => {
+    console.error('Не удалось запустить приложение:', error);
+    app.quit();
   });
   app.on('before-quit', () => {
     session.stop('Приложение закрыто');

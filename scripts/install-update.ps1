@@ -1,4 +1,5 @@
 param(
+  [Parameter(Mandatory = $true)][ValidateSet('portable', 'installer')][string]$UpdateType,
   [Parameter(Mandatory = $true)][string]$NewExecutablePath,
   [Parameter(Mandatory = $true)][string]$TargetExecutablePath,
   [Parameter(Mandatory = $true)][int]$ProcessId
@@ -8,15 +9,23 @@ $ErrorActionPreference = 'Stop'
 if ([System.IO.Path]::GetExtension($NewExecutablePath) -ne '.exe') { throw 'Invalid update file' }
 if ([System.IO.Path]::GetExtension($TargetExecutablePath) -ne '.exe') { throw 'Invalid target file' }
 if (-not (Test-Path -LiteralPath $NewExecutablePath -PathType Leaf)) { throw 'Update file not found' }
-if (-not (Test-Path -LiteralPath $TargetExecutablePath -PathType Leaf)) { throw 'Portable application not found' }
+if (-not (Test-Path -LiteralPath $TargetExecutablePath -PathType Leaf)) { throw 'Application not found' }
 
 Wait-Process -Id $ProcessId -Timeout 120 -ErrorAction SilentlyContinue
 if (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue) { throw 'Application did not close in time' }
 
 $deadline = (Get-Date).AddSeconds(120)
-while (Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $TargetExecutablePath }) {
-  if ((Get-Date) -ge $deadline) { throw 'Portable launcher did not close in time' }
+while (Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -ieq $TargetExecutablePath }) {
+  if ((Get-Date) -ge $deadline) { throw 'Application process did not close in time' }
   Start-Sleep -Seconds 1
+}
+
+if ($UpdateType -eq 'installer') {
+  $installer = Start-Process -FilePath $NewExecutablePath -ArgumentList '/S' -Wait -PassThru
+  if ($installer.ExitCode -ne 0) { throw "Installer failed with exit code $($installer.ExitCode)" }
+  Start-Process -FilePath $TargetExecutablePath
+  Remove-Item -LiteralPath $NewExecutablePath -Force
+  exit 0
 }
 
 $directory = [System.IO.Path]::GetDirectoryName($TargetExecutablePath)
