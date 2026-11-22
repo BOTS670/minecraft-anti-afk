@@ -1,0 +1,64 @@
+{
+  "name": "minecraft-anti-afk",
+  "version": "1.1.0",
+  "description": "Локальное Windows-приложение: периодическая активность в выбранном клиенте Minecraft Java.",
+  "main": "main.js",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/validation.test.js test/scheduler.test.js test/session.test.js test/windows.test.js test/scripts.test.js test/updater.test.js",
+    "dist:portable": "electron-builder --win portable --x64",
+    "check": "node --check main.js && node --check preload.js && node --check renderer/renderer.js && node --check src/validation.js && node --check src/clients.js && node --check src/scheduler.js && node --check src/session.js && node --check src/windows.js && node --check src/updater.js"
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "26.18.0"
+  },
+  "antiAfk": {
+    "updateRepo": "BOTS670/minecraft-anti-afk"
+  },
+  "allowScripts": {
+    "electron@45.4.1": true
+  },
+  "build": {
+    "appId": "com.mc.anti-afk",
+    "productName": "Minecraft Anti-AFK",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "scripts",
+        "to": "scripts",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "Minecraft-Anti-AFK-${version}-portable.${ext}"
+    }
+  }
+}

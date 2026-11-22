@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minecraft Anti-AFK</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <section class="countdown" aria-live="polite">
+      <div id="timer" class="timer">—</div>
+      <div id="status" class="status">Не запущено</div>
+    </section>
+
+    <section class="block">
+      <div class="row">
+        <label for="clients">Клиент Minecraft</label>
+        <button id="refresh" type="button" class="ghost">Обновить список</button>
+      </div>
+      <select id="clients" size="4" aria-describedby="clients-hint"></select>
+      <p id="clients-hint" class="hint"></p>
+    </section>
+
+    <section class="block">
+      <fieldset id="modes">
+        <legend>Режим активности</legend>
+        <label><input type="radio" name="mode" value="look" checked> Повернуть камеру и вернуть обратно</label>
+        <label><input type="radio" name="mode" value="step"> Шаг вперёд и назад</label>
+        <label><input type="radio" name="mode" value="jump"> Прыжок</label>
+      </fieldset>
+      <div class="row interval">
+        <label for="interval">Интервал, секунд</label>
+        <input id="interval" type="number" min="5" max="3600" step="1" value="60">
+      </div>
+    </section>
+
+    <section class="actions">
+      <button id="start" type="button" class="primary">Запустить</button>
+      <button id="stop" type="button" class="danger" disabled>Остановить</button>
+    </section>
+
+    <section class="block summary">
+      <dl>
+        <dt>Клиент</dt><dd id="s-client">—</dd>
+        <dt>Режим</dt><dd id="s-mode">—</dd>
+        <dt>Последнее действие</dt><dd id="s-last">—</dd>
+      </dl>
+      <p id="message" class="message" role="status"></p>
+    </section>
+
+    <section class="block update">
+      <div class="row">
+        <span id="u-text" role="status">Обновления: проверка…</span>
+        <button id="u-check" type="button" class="ghost">Проверить</button>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="u-auto" checked> Проверять автоматически</label>
+        <div class="update-actions">
+          <button id="u-install" type="button" class="primary" hidden>Установить</button>
+          <button id="u-cancel" type="button" class="ghost" hidden>Отмена</button>
+          <button id="u-open" type="button" class="ghost" hidden>Страница релиза</button>
+        </div>
+      </div>
+    </section>
+
+    <p class="hint small">Во время действия окно Minecraft ненадолго выходит на передний план, затем возвращается прежнее. Используйте только там, где это разрешено правилами сервера.</p>
+  </main>
+  <script src="renderer.js"></script>
+</body>
+</html>
